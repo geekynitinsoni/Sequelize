@@ -6,6 +6,7 @@ const userSchema = Joi.object({
   password: Joi.string().min(8).required(),
   createdBy: Joi.string().optional(),
   modifiedBy: Joi.string().optional(),
+  isAdmin: Joi.boolean().optional(),
 });
 
 const updateUserSchema = Joi.object({
@@ -13,6 +14,7 @@ const updateUserSchema = Joi.object({
   email: Joi.string().email().optional(),
   password: Joi.string().min(8).optional(),
   modifiedBy: Joi.string().optional(),
+  isAdmin: Joi.boolean().optional(),
 });
 
 const loginSchema = Joi.object({
@@ -24,6 +26,7 @@ const registerSchema = Joi.object({
   name: Joi.string().min(3).max(30).required(),
   email: Joi.string().email().required(),
   password: Joi.string().min(8).required(),
+  isAdmin: Joi.boolean().optional(),
 });
 
 module.exports = { userSchema, updateUserSchema, loginSchema, registerSchema };

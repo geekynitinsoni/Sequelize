@@ -6,9 +6,19 @@ const {
   userSchema,
   updateUserSchema,
 } = require("../validations/userValidation");
+const checkOwner = require("../middleware/checkOwner");
+const isAdmin = require("../middleware/isAdmin");
+const bcrypt = require("bcrypt");
+const updateUserLimiter = require("../middleware/rateLimiter");
+const { Op } = require("sequelize");
 
-router.get("/", authMiddleware, async (req, res) => {
+router.get("/", authMiddleware, isAdmin, async (req, res) => {
   try {
+    // if (req.user.isAdmin === false) {
+    //   return res
+    //     .status(403)
+    //     .json({ error: "Access denied: Admins only can view all users" });
+    // }
     const users = await User.findAll();
     res.status(200).json(users);
   } catch (err) {
@@ -16,9 +26,11 @@ router.get("/", authMiddleware, async (req, res) => {
   }
 });
 
-router.get("/:id", authMiddleware, async (req, res) => {
+router.get("/:id", authMiddleware, checkOwner, async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findByPk(req.params.id, {
+      attributes: { exclude: ["password"] },
+    });
     if (user) res.status(200).json(user);
     else res.status(404).json({ error: "User not found" });
   } catch (error) {
@@ -26,48 +38,68 @@ router.get("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-router.post("/", authMiddleware, async (req, res) => {
-  try {
-    const { err, val } = userSchema.validate(req.body);
-    console.log("Validation result:", val);
+// router.post("/", authMiddleware, async (req, res) => {
+//   try {
+//     const { error, value } = userSchema.validate(req.body);
 
-    if (err) {
-      return res.status(400).json({ error: err.message });
+//     if (error) {
+//       return res.status(400).json({ error: error.message });
+//     }
+
+//     const user = await User.create({
+//       ...value,
+//       createdBy: req.user.id,
+//     });
+//     res.status(201).json(user);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+
+router.put(
+  "/:id",
+  authMiddleware,
+  checkOwner,
+  updateUserLimiter,
+  async (req, res) => {
+    try {
+      const { error, value } = updateUserSchema.validate(req.body);
+
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      if (value.password) {
+        value.password = await bcrypt.hash(value.password, 10);
+      }
+
+      if (value.email) {
+        const existingUser = await User.findOne({
+          where: { email: value.email, id: { [Op.ne]: req.params.id } },
+        });
+        if (existingUser) {
+          return res.status(400).json({ error: "Email already in use" });
+        }
+      }
+
+      const [updated] = await User.update(
+        { ...value, modifiedBy: req.user.id },
+        { where: { id: req.params.id } }
+      );
+
+      if (!updated) return res.status(404).json({ error: "User not found" });
+
+      const updatedUser = await User.findByPk(req.params.id, {
+        attributes: { exclude: ["password"] },
+      });
+      res.json(updatedUser);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
-
-    const user = await User.create({
-      ...val,
-      createdBy: req.user.id,
-    });
-    res.status(201).json(user);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
-});
+);
 
-router.put("/:id", authMiddleware, async (req, res) => {
-  try {
-    const { err, val } = updateUserSchema.validate(req.body);
-
-    if (err) {
-      return res.status(400).json({ error: err.message });
-    }
-
-    const [updated] = await User.update(
-      { ...val, modifiedBy: req.user.id },
-      { where: { id: req.params.id } }
-    );
-
-    if (!updated) return res.status(404).json({ error: "User not found" });
-
-    const updatedUser = await User.findByPk(req.params.id);
-    res.json(updatedUser);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.delete("/:id", authMiddleware, async (req, res) => {
+router.delete("/:id", authMiddleware, checkOwner, async (req, res) => {
   try {
     const deleted = await User.destroy({
       where: { id: req.params.id },
