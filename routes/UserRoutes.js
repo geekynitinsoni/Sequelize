@@ -29,6 +29,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
 router.post("/", authMiddleware, async (req, res) => {
   try {
     const { err, val } = userSchema.validate(req.body);
+    console.log("Validation result:", val);
 
     if (err) {
       return res.status(400).json({ error: err.message });
