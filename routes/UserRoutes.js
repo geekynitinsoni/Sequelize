@@ -2,6 +2,10 @@ const express = require("express");
 const User = require("../models/User");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
+const {
+  userSchema,
+  updateUserSchema,
+} = require("../validations/userValidation");
 
 router.get("/", authMiddleware, async (req, res) => {
   try {
@@ -24,8 +28,14 @@ router.get("/:id", authMiddleware, async (req, res) => {
 
 router.post("/", authMiddleware, async (req, res) => {
   try {
+    const { err, val } = userSchema.validate(req.body);
+
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
     const user = await User.create({
-      ...req.body,
+      ...val,
       createdBy: req.user.id,
     });
     res.status(201).json(user);
@@ -36,10 +46,14 @@ router.post("/", authMiddleware, async (req, res) => {
 
 router.put("/:id", authMiddleware, async (req, res) => {
   try {
-    const { name, email } = req.body;
+    const { err, val } = updateUserSchema.validate(req.body);
+
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
 
     const [updated] = await User.update(
-      { name, email, modifiedBy: req.user.id },
+      { ...val, modifiedBy: req.user.id },
       { where: { id: req.params.id } }
     );
 
